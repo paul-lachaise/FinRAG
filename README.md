@@ -14,8 +14,11 @@ Pour garantir cette souveraineté, le pipeline s'appuie sur **6 modèles d'Intel
 2. **Modèles d'Architecture Visuelle (Via Docling / Hugging Face) :**
    * `docling-layout-heron` : Analyse avancée de la mise en page (titres, paragraphes).
    * `docling-models` (*TableFormer*) : Reconstitution structurelle des tableaux complexes.
-3. **Modèle de Vectorisation (Via SentenceTransformers) :**
-   * `BAAI/bge-m3` : Transformation du texte en embeddings (vecteurs de 1024 dimensions, support multilingue et multi-granularité jusqu'à 8192 tokens).
+3. **Modèle de Vectorisation Multi-Espaces (Via FlagEmbedding)**
+   * `BAAI/bge-m3`: modèle "All-in-One" exécuté via la librairie officielle de l'académie BAAI pour générer simultanément trois espaces vectoriels lors d'une seule passe d'inférence :
+      * **Dense (Sémantique) :** Vecteurs globaux de 1024 dimensions pour la compréhension du sens général.
+      * **Sparse (Lexical) :** Vecteurs creux basés sur des pondérations de tokens pour la recherche exacte par mots-clés (chiffres, codes bancaires).
+      * **ColBERT (Late Interaction) :** Matrice d'embeddings de 1024 dimensions calculée jeton par jeton. Elle permet une évaluation granulaire au moment de la recherche via l'opérateur `MAX_SIM` de Qdrant.
 
 ## ⚙️ La Stack Technique
 
