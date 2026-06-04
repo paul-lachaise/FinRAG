@@ -78,7 +78,7 @@ def build_points(chunks: List[Dict[str, Any]], embeddings, model):
 
         # -------- payload --------
         payload = {
-            "source": NOM_DU_DOCUMENT,  # <-- 1. On réinjecte la source manuellement ici
+            "source": NOM_DU_DOCUMENT,
             "version": INDEX_VERSION,
             "texte": chunk_dict["texte"],
             **chunk_dict["metadata"],
@@ -107,7 +107,7 @@ def build_points(chunks: List[Dict[str, Any]], embeddings, model):
 
         # -------- ID stable --------
         point_id = make_point_id(
-            NOM_DU_DOCUMENT,  # <-- 2. CORRECTION : On utilise la variable directe au lieu du dictionnaire
+            NOM_DU_DOCUMENT,
             i,
             chunk_dict["texte"],
         )

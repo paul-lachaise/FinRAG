@@ -1,5 +1,6 @@
-from finrag.services.config import PATH_MARKDOWN
-from chunking import load_markdown, chunk_markdown
+from finrag.services.config import PATH_JSON, PATH_IMAGES_DIR
+from chunking import chunk_document
+from vision_processor import process_images_to_chunks
 from embed_index import (
     load_model,
     get_qdrant_client,
@@ -10,44 +11,47 @@ from embed_index import (
 
 
 def main():
-    print("[1] Loading markdown...")
-    md = load_markdown(PATH_MARKDOWN)
+    print("==========================================")
+    print("[1] Découpage du texte (Docling JSON)...")
+    chunks_texte = chunk_document(PATH_JSON)
+    print(f" -> {len(chunks_texte)} chunks de texte créés.")
 
-    print("[2] Chunking...")
-    chunks = chunk_markdown(md)
-    print(f"Chunks: {len(chunks)}")
+    print("\n[2] Analyse des images (LLM Vision)...")
+    chunks_images = process_images_to_chunks(PATH_IMAGES_DIR)
+    print(f" -> {len(chunks_images)} images analysées et transformées en texte.")
 
-    print("[3] Loading embedding model...")
+    # FUSION MAGIQUE
+    chunks_globaux = chunks_texte + chunks_images
+    print(f"\n[INFO] Total à indexer : {len(chunks_globaux)} éléments hybrides.")
+
+    print("\n[3] Chargement du modèle BGE-M3...")
     model = load_model()
 
-    print("[4] Encoding...")
+    print("[4] Encodage Vectoriel Multi-Vecteurs (ColBERT inclus)...")
+    # On donne l'ensemble des textes (texte pur + descriptions d'images) au modèle
+    textes_purs = [chunk["texte"] for chunk in chunks_globaux]
     embeddings = model.encode(
-        [c.page_content for c in chunks],
+        textes_purs,
         return_dense=True,
         return_sparse=True,
         return_colbert_vecs=True,
     )
 
-    print("[5] Qdrant init...")
+    print("[5] Initialisation Qdrant...")
     client = get_qdrant_client()
     ensure_collection(client)
 
-    print("[6] Building points...")
+    print("[6] Construction des payloads et des identifiants (UUID5)...")
+    # Ta fonction build_points actuelle n'a pas besoin de changer,
+    # elle ingère parfaitement nos nouveaux dictionnaires unifiés.
+    points = build_points(chunks_globaux, embeddings, model)
 
-    # 1. Conversion des objets LangChain 'Document' en dictionnaires Python
-    chunks_as_dicts = [
-        {"texte": chunk.page_content, "metadata": chunk.metadata} for chunk in chunks
-    ]
-
-    # 2. Appel de ta nouvelle fonction prête pour la production
-    points = build_points(chunks_as_dicts, embeddings, model)
-
-    print(f"[INFO] {len(points)} points ready")
-
-    print("[7] Upserting...")
+    print("[7] Injection dans Qdrant (Upsert)...")
     upsert_points(client, points)
 
-    print("[DONE] Ingestion finished")
+    print("\n==========================================")
+    print("[SUCCESS] Ingestion Multimodale (Texte + Images) terminée !")
+    print("==========================================")
 
 
 if __name__ == "__main__":
