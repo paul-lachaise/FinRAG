@@ -10,9 +10,18 @@ from finrag.services.config import (
     COLLECTION_NAME,
     QDRANT_URL,
     NOM_DU_DOCUMENT,
+    ENTITE_DU_DOCUMENT,
+    ANNEE_DU_DOCUMENT,
+    TRIMESTRE_DU_DOCUMENT,
+    LANGUE_DU_DOCUMENT,
+    TYPE_DE_DOCUMENT,
     INDEX_VERSION,
     BATCH_SIZE,
 )
+
+# Import de ton contrat de données Pydantic
+from finrag.api.schemas import IngestionPayload
+
 
 # utiliation du GPU si disponible
 device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -66,6 +75,37 @@ def ensure_collection(client: QdrantClient):
         },
         sparse_vectors_config={"sparse": models.SparseVectorParams()},
     )
+    print("[INFO] Création des index de métadonnées pour le filtrage rapide...")
+    client.create_payload_index(
+        collection_name=COLLECTION_NAME,
+        field_name="entite",
+        field_schema=models.PayloadSchemaType.KEYWORD,
+    )
+    client.create_payload_index(
+        collection_name=COLLECTION_NAME,
+        field_name="annee",
+        field_schema=models.IntegerIndexParams(type="integer", lookup=True, range=True),
+    )
+    client.create_payload_index(
+        collection_name=COLLECTION_NAME,
+        field_name="trimestre",
+        field_schema=models.PayloadSchemaType.KEYWORD,
+    )
+    client.create_payload_index(
+        collection_name=COLLECTION_NAME,
+        field_name="type",
+        field_schema=models.PayloadSchemaType.KEYWORD,
+    )
+    client.create_payload_index(
+        collection_name=COLLECTION_NAME,
+        field_name="format",
+        field_schema=models.PayloadSchemaType.KEYWORD,
+    )
+    client.create_payload_index(
+        collection_name=COLLECTION_NAME,
+        field_name="langue",
+        field_schema=models.PayloadSchemaType.KEYWORD,
+    )
 
 
 # =========================
@@ -76,13 +116,22 @@ def build_points(chunks: List[Dict[str, Any]], embeddings, model):
 
     for i, chunk_dict in enumerate(chunks):
 
-        # -------- payload --------
-        payload = {
+        # 1. Construction du dictionnaire brut
+        raw_payload = {
             "source": NOM_DU_DOCUMENT,
             "version": INDEX_VERSION,
+            "entite": ENTITE_DU_DOCUMENT,
+            "type": TYPE_DE_DOCUMENT,
+            "annee": ANNEE_DU_DOCUMENT,
+            "langue": LANGUE_DU_DOCUMENT,
+            "trimestre": TRIMESTRE_DU_DOCUMENT,
             "texte": chunk_dict["texte"],
             **chunk_dict["metadata"],
         }
+
+        # 2. Validation stricte avec Pydantic avant l'insertion
+        # Si une donnée obligatoire manque ou a le mauvais type, ça plantera proprement ici
+        validated_payload = IngestionPayload(**raw_payload).model_dump()
 
         # -------- sparse --------
         lexical_weights = embeddings["lexical_weights"][i]
@@ -116,7 +165,7 @@ def build_points(chunks: List[Dict[str, Any]], embeddings, model):
         points.append(
             models.PointStruct(
                 id=point_id,
-                payload=payload,
+                payload=validated_payload,  # Utilisation du payload validé !
                 vector={
                     "dense": embeddings["dense_vecs"][i].tolist(),
                     "colbert": embeddings["colbert_vecs"][i].tolist(),

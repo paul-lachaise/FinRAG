@@ -1,4 +1,4 @@
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional
 
 import torch
 from qdrant_client import QdrantClient, models
@@ -10,37 +10,21 @@ from finrag.services.config import (
     USER_QUERY,
 )
 
-
-# =========================================================
-# DEVICE
-# =========================================================
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
 print("[INFO] CUDA:", torch.cuda.is_available())
 print("[INFO] Device:", device)
 
-
-# =========================================================
-# MODEL
-# =========================================================
 print("[INFO] Loading BGE-M3 model...")
 model = BGEM3FlagModel(
     "BAAI/bge-m3",
     use_fp16=(device == "cuda"),
 )
 
-
-# =========================================================
-# QDRANT CLIENT
-# =========================================================
 client = QdrantClient(url=QDRANT_URL)
 
 
-# =========================================================
-# ENCODING QUERY
-# =========================================================
 def encode_query(query: str):
-
     print(f"[INFO] Encoding query: {query}")
 
     emb = model.encode(
@@ -50,13 +34,9 @@ def encode_query(query: str):
         return_colbert_vecs=True,
     )
 
-    # -------- dense --------
     dense_vec = emb["dense_vecs"].tolist()
-
-    # -------- colbert --------
     colbert_vec = emb["colbert_vecs"].tolist()
 
-    # -------- sparse --------
     lexical_weights = emb["lexical_weights"]
     sparse_dict: Dict[int, float] = {}
 
@@ -79,15 +59,73 @@ def encode_query(query: str):
     return dense_vec, sparse_vec, colbert_vec
 
 
-# =========================================================
-# RETRIEVAL QDRANT
-# =========================================================
-def retrieve(query: str, top_k: int = 3):
-
+def retrieve(
+    query: str,
+    top_k: int = 3,
+    entite: Optional[str] = None,
+    annee_exacte: Optional[int] = None,
+    annee_gte: Optional[int] = None,
+    annee_lte: Optional[int] = None,
+    trimestre: Optional[str] = None,
+    doc_type: Optional[str] = None,
+    format: Optional[str] = None,
+    langue: Optional[str] = None,
+):
     dense_vec, sparse_vec, colbert_vec = encode_query(query)
+
+    must_conditions = []
+
+    if entite:
+        must_conditions.append(
+            models.FieldCondition(key="entite", match=models.MatchValue(value=entite))
+        )
+
+    if trimestre:
+        must_conditions.append(
+            models.FieldCondition(
+                key="trimestre", match=models.MatchValue(value=trimestre)
+            )
+        )
+
+    if doc_type:
+        must_conditions.append(
+            models.FieldCondition(key="type", match=models.MatchValue(value=doc_type))
+        )
+
+    if format:
+        must_conditions.append(
+            models.FieldCondition(key="format", match=models.MatchValue(value=format))
+        )
+
+    if langue:
+        must_conditions.append(
+            models.FieldCondition(key="langue", match=models.MatchValue(value=langue))
+        )
+
+    if annee_exacte is not None:
+        must_conditions.append(
+            models.FieldCondition(
+                key="annee", match=models.MatchValue(value=annee_exacte)
+            )
+        )
+    elif annee_gte is not None or annee_lte is not None:
+        range_params = {}
+        if annee_gte is not None:
+            range_params["gte"] = annee_gte
+        if annee_lte is not None:
+            range_params["lte"] = annee_lte
+        must_conditions.append(
+            models.FieldCondition(key="annee", range=models.Range(**range_params))
+        )
+
+    query_filter = models.Filter(must=must_conditions) if must_conditions else None
+
+    if query_filter:
+        print(f"[INFO] Filtres appliqués : {len(must_conditions)} condition(s)")
 
     results = client.query_points(
         collection_name=COLLECTION_NAME,
+        query_filter=query_filter,
         prefetch=[
             models.Prefetch(
                 prefetch=[
@@ -115,47 +153,42 @@ def retrieve(query: str, top_k: int = 3):
     return results.points
 
 
-# =========================================================
-# DEBUG PRINT
-# =========================================================
 def pretty_print_results(points: List[Any]):
-
     print("\n" + "=" * 50)
     print("RÉSULTATS RAG")
     print("=" * 50)
 
     if not points:
-        print("[WARN] Aucun résultat.")
+        print("[WARN] Aucun résultat ne correspond à la requête ou aux filtres.")
         return
 
     for i, point in enumerate(points):
-
         payload = point.payload or {}
 
-        source = payload.get("source", "unknown")
+        entite = payload.get("entite", "Inconnue")
+        annee = payload.get("annee", "????")
+        trimestre = payload.get("trimestre", "")
+        page = payload.get("page", "?")
+        section = payload.get("section", "Racine")
+        doc_type = payload.get("type", "Doc").upper()
+        format_doc = payload.get("format", "texte").upper()
+        langue = payload.get("langue", "?")
+
         score = round(point.score, 4)
-
-        t1 = payload.get("Titre_1", "")
-        t2 = payload.get("Titre_2")
-        t3 = payload.get("Titre_3")
-
-        hierarchy = [t for t in [t1, t2, t3] if t]
-        context = " > ".join(hierarchy) if hierarchy else "root"
-
         text = payload.get("texte", "")
 
-        print(f"\n[{i+1}] {source} | {context} | score={score}")
+        header = f"[{doc_type}|{format_doc}]({langue}) {entite} {annee} {trimestre} | Page {page} | {section}"
+
+        print(f"\n[{i+1}] {header} | Score: {score}")
         print("-" * 50)
         print(text[:1500] + "...\n")
 
 
-# =========================================================
-# TEST LOCAL
-# =========================================================
 if __name__ == "__main__":
-
     test_query = USER_QUERY
-
-    docs = retrieve(test_query)
-
+    # docs = retrieve(test_query) # <-- Aucun filtre, cherche partout
+    # docs = retrieve(test_query, entite="CASA", doc_type="texte") # <-- Filtre exact
+    docs = retrieve(
+        test_query, entite="BNP Paribas", annee_gte=2025
+    )  # <-- Filtre avec intervalle
     pretty_print_results(docs)

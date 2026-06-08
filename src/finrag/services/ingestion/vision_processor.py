@@ -47,7 +47,7 @@ def process_images_to_chunks(images_dir: Path) -> List[Dict[str, Any]]:
             "metadata": {
                 "source": NOM_DU_DOCUMENT,
                 "version": INDEX_VERSION,
-                "type": "image",
+                "format": "image",
                 "section": contexte["section"],
                 "page": contexte["page"],
                 "image_path": str(image_file),

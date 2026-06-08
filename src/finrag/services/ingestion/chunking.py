@@ -91,7 +91,7 @@ def chunk_document(json_path: Path) -> List[Dict[str, Any]]:
                     "texte": sub_text,
                     "metadata": {
                         "source": NOM_DU_DOCUMENT,
-                        "type": "texte",  # <-- Clé unifiée
+                        "format": "texte",  # <-- Clé unifiée
                         "section": section_complete,
                         "page": page_ref,
                         "image_path": "",  # <-- Vide pour le texte, mais la clé existe !
