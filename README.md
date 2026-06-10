@@ -1,11 +1,16 @@
 # FinRAG : Multimodal RAG for Financial Documents
 
-This project is a Proof of Concept aimed at testing and implementing a **Multimodal Retrieval-Augmented Generation (RAG) architecture** specialized in the ingestion of complex banking and financial data (annual reports, financial statements, balance sheets, etc.).
+> **Project Context:** This repository is a **personal sandbox and Proof of Concept (PoC)** developed in parallel with my internship. It serves as an independent testing ground to experiment with cutting-edge RAG architectures, validate complex ideas, and evaluate solutions that can later be securely reimplemented in a corporate environment.
 
-The main objective is **data sovereignty**: the entire pipeline (from PDF extraction to vector indexing) is designed to run **100% locally (air-gapped)**, without any leakage to external cloud APIs.
+The ultimate objective of this project is to build an **autonomous Multimodal RAG Agent** capable of reasoning over complex, highly sensitive banking and financial data (annual reports, financial statements, balance sheets, tables, and embedded graphs).
+
+### The Core Need: Absolute Confidentiality
+Because financial analysis often involves **highly confidential and proprietary documents**, data sovereignty is the absolute priority. This specific requirement dictated the choice of the entire technical stack: the pipeline is designed to run **100% locally (air-gapped)**, ensuring zero data leakage to external cloud providers or third-party APIs.
+
+---
 
 ## Embedded AI Models (100% Local)
-To ensure sovereignty, the pipeline relies on **6 AI models** executed locally on the machine:
+To guarantee data sovereignty and privacy, the pipeline relies on **6 AI models** executed locally on the machine:
 
 1. **Vision & OCR Models (via RapidOCR):**
    * `ch_PP-OCRv4_det_mobile`: Text region detection.
@@ -14,27 +19,29 @@ To ensure sovereignty, the pipeline relies on **6 AI models** executed locally o
 
 2. **Visual Architecture Models (via Docling / Hugging Face):**
    * `docling-layout-heron`: Advanced layout analysis (titles, paragraphs, structure).
-   * `docling-models` (*TableFormer*): Structural reconstruction of complex tables.
+   * `docling-models` (*TableFormer*): Structural reconstruction of complex financial tables.
 
 3. **Multi-Space Embedding Model (via FlagEmbedding):**
-   * `BAAI/bge-m3`: all-in-one model executed via the official BAAI library, generating three vector spaces in a single forward pass:
-      * **Dense (Semantic):** 1024-dimensional global embeddings for semantic understanding.
-      * **Sparse (Lexical):** sparse token-weighted vectors for exact keyword matching (financial codes, numbers).
-      * **ColBERT (Late Interaction):** 1024-dimensional token-level embeddings enabling fine-grained retrieval via Qdrant `MAX_SIM`.
+   * `BAAI/bge-m3`: All-in-one model executed via the official BAAI library, generating three complementary vector spaces in a single forward pass:
+      * **Dense (Semantic):** 1024-dimensional global embeddings for deep semantic understanding.
+      * **Sparse (Lexical):** Sparse token-weighted vectors for exact keyword and numerical matching (financial codes, precise percentages).
+      * **ColBERT (Late Interaction):** 1024-dimensional token-level embeddings enabling fine-grained token alignment via Qdrant `MAX_SIM`.
+
+---
 
 ## Technical Stack
 
-This stack is designed to preserve the integrity of financial tables while enabling downstream AI analysis.
+The selected stack balances complex document parsing with strict data security boundaries.
 
-### 1. Extraction & Parsing (Multimodal)
-* **[Docling](https://github.com/DS4SD/docling):** Core parsing engine. Converts complex financial PDFs into clean Markdown while preserving strict table structure.
-* **Image extraction:** physical extraction of graphs with metadata (page-level mapping system) for later multimodal analysis using vision LLMs.
+### 1. Extraction & Parsing (Multimodal Ingestion)
+* **[Docling](https://github.com/DS4SD/docling):** Core document layout analysis engine. Converts complex financial PDFs into clean Markdown while preserving strict multi-page table structures.
+* **Visual Asset Tracking:** Automatic physical extraction of charts, graphs, and images with an associated metadata page-level mapping system. This prepares the ground for multimodal analysis using local vision LLMs.
 
 ### 2. Intelligent Chunking (Semantic & Hierarchical)
-* **[LangChain](https://python.langchain.com/):** usage of text splitters (`MarkdownHeaderTextSplitter`, `RecursiveCharacterTextSplitter`).
-* **Strategy:** Markdown-based splitting using headers (`#`, `##`) to preserve context, with large chunk sizes (up to 4000 characters) to avoid splitting financial tables.
+* **[LangChain](https://python.langchain.com/):** Orchestration of contextual text splitters (`MarkdownHeaderTextSplitter`, `RecursiveCharacterTextSplitter`).
+* **Strategy:** Document slicing based on Markdown headers (`#`, `##`) to preserve local context. Chunk sizes are adapted (up to 4000 characters) to ensure that tightly coupled financial tables are never broken apart mid-page.
 
-### 3. Vector Database
-* **[Qdrant](https://qdrant.tech/):** high-performance vector search engine for semantic retrieval.
-* **Deployment:** fully local via Docker container (`localhost:6333`).
-* **Persistence:** embeddings, metadata (titles, sources), and raw text are persisted on disk using Docker bind mounts.
+### 3. Vector Database & Storage
+* **[Qdrant](https://qdrant.tech/):** High-performance vector search engine optimized for hybrid and multi-vector search (Dense + Sparse + ColBERT).
+* **Deployment:** Fully local deployment via Docker container (`localhost:6333`).
+* **Persistence:** Embeddings, raw payloads, and business metadata (entity, year, quarter, format) are fully persisted on disk using Docker bind mounts.

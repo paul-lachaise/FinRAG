@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import Optional
+from typing import Optional, List
 from pydantic import BaseModel, Field
 
 
@@ -119,4 +119,25 @@ class DocumentResponse(BaseModel):
     score: float = Field(
         ...,
         description="Score de pertinence hybride calculé par le moteur de recherche",
+    )
+
+
+# ==========================================
+# SCHÉMA POUR LA RÉPONSE FINALE DU LLM
+# ==========================================
+class SourceCitation(BaseModel):
+    document: str = Field(
+        ..., description="Nom du document source (ex: 'BNPP_CP_T4-25_FR')"
+    )
+    page: str = Field(..., description="Numéro de la page utilisée")
+    entite: Optional[str] = Field(None, description="Nom de l'entité concernée")
+
+
+class RAGFinalAnswer(BaseModel):
+    reponse_texte: str = Field(
+        ..., description="La réponse complète générée par le LLM, formatée en Markdown."
+    )
+    sources_utilisees: List[SourceCitation] = Field(
+        ...,
+        description="Liste stricte et structurée des sources utilisées pour rédiger la réponse.",
     )
